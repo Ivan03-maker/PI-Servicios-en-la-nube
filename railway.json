@@ -2,8 +2,5 @@
   "build": {
     "builder": "NIXPACKS",
     "providers": ["php"]
-  },
-  "deploy": {
-    "startCommand": "php -S 0.0.0.0:$PORT index.html"
   }
 }
