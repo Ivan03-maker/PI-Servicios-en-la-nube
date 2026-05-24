@@ -36,6 +36,10 @@ $port = getenv('MYSQLPORT') ?: "3306";
 try {
     $pdo = new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+    // 🌟 CORRECCIÓN CRUCIAL: Desactivar emulación de prepares para que el LIMIT acepte enteros reales
+    $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+    
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(["error" => "Error de conexión en Railway: " . $e->getMessage()]);
@@ -78,7 +82,7 @@ switch ($method) {
             $stmt->bindValue($key, $val);
         }
         
-        // Forzar explícitamente enteros para evitar fallos de sintaxis SQL en LIMIT
+        // Al estar desactivada la emulación, PDO mandará estos valores como INTEGER puros a MySQL
         $stmt->bindValue(':start', (int)$start, PDO::PARAM_INT);
         $stmt->bindValue(':length', (int)$length, PDO::PARAM_INT);
         $stmt->execute();
@@ -124,6 +128,12 @@ switch ($method) {
         if (isset($_GET['id'])) {
             $stmt = $pdo->prepare("DELETE FROM peliculas WHERE id = ?");
             $stmt->execute([$_GET['id']]);
+            
+            // 🌟 Manteniendo tu lógica de reindexación física para que los IDs vuelvan a ser 1, 2, 3...
+            $pdo->query("SET @count = 0;");
+            $pdo->query("UPDATE peliculas SET id = (@count:= @count + 1);");
+            $pdo->query("ALTER TABLE peliculas AUTO_INCREMENT = 1;");
+            
             echo json_encode(["status" => "success", "message" => "Película eliminada con éxito"]);
         }
         break;
