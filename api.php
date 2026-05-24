@@ -37,7 +37,7 @@ try {
     $pdo = new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
-    // 🌟 CORRECCIÓN CRUCIAL: Desactivar emulación de prepares para que el LIMIT acepte enteros reales
+    // Desactivar emulación de prepares para que el LIMIT acepte enteros reales
     $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
     
 } catch (PDOException $e) {
@@ -50,54 +50,67 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 switch ($method) {
     case 'GET':
-        $draw = isset($_GET['draw']) ? intval($_GET['draw']) : 1;
-        $start = isset($_GET['start']) ? intval($_GET['start']) : 0;
-        $length = isset($_GET['length']) ? intval($_GET['length']) : 3;
-        $searchValue = isset($_GET['search']['value']) ? $_GET['search']['value'] : '';
-        
-        $columns = ['id', 'titulo', 'director', 'anio'];
-        $orderColumnIndex = isset($_GET['order'][0]['column']) ? intval($_GET['order'][0]['column']) : 0;
-        $orderDir = isset($_GET['order'][0]['dir']) && $_GET['order'][0]['dir'] === 'desc' ? 'DESC' : 'ASC';
-        $orderColumn = $columns[$orderColumnIndex];
+        try {
+            $draw = isset($_GET['draw']) ? intval($_GET['draw']) : 1;
+            $start = isset($_GET['start']) ? intval($_GET['start']) : 0;
+            $length = isset($_GET['length']) ? intval($_GET['length']) : 3;
+            $searchValue = isset($_GET['search']['value']) ? $_GET['search']['value'] : '';
+            
+            $columns = ['id', 'titulo', 'director', 'anio'];
+            $orderColumnIndex = isset($_GET['order'][0]['column']) ? intval($_GET['order'][0]['column']) : 0;
+            $orderDir = isset($_GET['order'][0]['dir']) && $_GET['order'][0]['dir'] === 'desc' ? 'DESC' : 'ASC';
+            $orderColumn = $columns[$orderColumnIndex];
 
-        // Asegurar que las consultas cuenten correctamente aun estando vacías
-        $totalRecords = $pdo->query("SELECT COUNT(*) FROM peliculas")->fetchColumn();
-        $totalRecords = $totalRecords ? intval($totalRecords) : 0;
+            // Asegurar que las consultas cuenten correctamente aun estando vacías
+            $totalRecords = $pdo->query("SELECT COUNT(*) FROM peliculas")->fetchColumn();
+            $totalRecords = $totalRecords ? intval($totalRecords) : 0;
 
-        $queryStr = "SELECT * FROM peliculas WHERE 1=1";
-        $params = [];
-        if (!empty($searchValue)) {
-            $queryStr .= " AND (titulo LIKE :search OR director LIKE :search OR anio LIKE :search)";
-            $params[':search'] = "%$searchValue%";
+            $queryStr = "SELECT * FROM peliculas WHERE 1=1";
+            $params = [];
+            if (!empty($searchValue)) {
+                $queryStr .= " AND (titulo LIKE :search OR director LIKE :search OR anio LIKE :search)";
+                $params[':search'] = "%$searchValue%";
+            }
+
+            $stmtFilter = $pdo->prepare($queryStr);
+            $stmtFilter->execute($params);
+            $totalRecordwithFilter = $stmtFilter->rowCount();
+
+            $queryStr .= " ORDER BY $orderColumn $orderDir LIMIT :start, :length";
+            
+            $stmt = $pdo->prepare($queryStr);
+            
+            // 🌟 CORRECCIÓN CRUCIAL: Mapeamos los parámetros de búsqueda si existen
+            foreach ($params as $key => $val) {
+                $stmt->bindValue($key, $val);
+            }
+            
+            // 🌟 VINCULACIÓN ASILADA: Forzamos la asignación de LIMIT sin importar el foreach previo
+            $stmt->bindValue(':start', (int)$start, PDO::PARAM_INT);
+            $stmt->bindValue(':length', (int)$length, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (!$data) {
+                $data = []; 
+            }
+
+            echo json_encode([
+                "draw" => intval($draw),
+                "recordsTotal" => $totalRecords,
+                "recordsFiltered" => intval($totalRecordwithFilter),
+                "data" => $data
+            ]);
+        } catch (Exception $e) {
+            // Si algo truena en el SQL, esto evitará la respuesta en blanco enviando el error en JSON estructurado
+            echo json_encode([
+                "draw" => isset($_GET['draw']) ? intval($_GET['draw']) : 1,
+                "recordsTotal" => 0,
+                "recordsFiltered" => 0,
+                "data" => [],
+                "error" => "Error interno en GET: " . $e->getMessage()
+            ]);
         }
-
-        $stmtFilter = $pdo->prepare($queryStr);
-        $stmtFilter->execute($params);
-        $totalRecordwithFilter = $stmtFilter->rowCount();
-
-        $queryStr .= " ORDER BY $orderColumn $orderDir LIMIT :start, :length";
-        
-        $stmt = $pdo->prepare($queryStr);
-        foreach ($params as $key => $val) {
-            $stmt->bindValue($key, $val);
-        }
-        
-        // Al estar desactivada la emulación, PDO mandará estos valores como INTEGER puros a MySQL
-        $stmt->bindValue(':start', (int)$start, PDO::PARAM_INT);
-        $stmt->bindValue(':length', (int)$length, PDO::PARAM_INT);
-        $stmt->execute();
-        
-        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        if (!$data) {
-            $data = []; // Retornar un contenedor vacío limpio si no hay filas
-        }
-
-        echo json_encode([
-            "draw" => intval($draw),
-            "recordsTotal" => $totalRecords,
-            "recordsFiltered" => intval($totalRecordwithFilter),
-            "data" => $data
-        ]);
         break;
 
     case 'POST':
@@ -129,7 +142,6 @@ switch ($method) {
             $stmt = $pdo->prepare("DELETE FROM peliculas WHERE id = ?");
             $stmt->execute([$_GET['id']]);
             
-            // 🌟 Manteniendo tu lógica de reindexación física para que los IDs vuelvan a ser 1, 2, 3...
             $pdo->query("SET @count = 0;");
             $pdo->query("UPDATE peliculas SET id = (@count:= @count + 1);");
             $pdo->query("ALTER TABLE peliculas AUTO_INCREMENT = 1;");
