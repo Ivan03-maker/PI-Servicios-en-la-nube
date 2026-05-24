@@ -56,7 +56,9 @@ switch ($method) {
         $orderDir = isset($_GET['order'][0]['dir']) && $_GET['order'][0]['dir'] === 'desc' ? 'DESC' : 'ASC';
         $orderColumn = $columns[$orderColumnIndex];
 
+        // Asegurar que las consultas cuenten correctamente aun estando vacías
         $totalRecords = $pdo->query("SELECT COUNT(*) FROM peliculas")->fetchColumn();
+        $totalRecords = $totalRecords ? intval($totalRecords) : 0;
 
         $queryStr = "SELECT * FROM peliculas WHERE 1=1";
         $params = [];
@@ -75,15 +77,20 @@ switch ($method) {
         foreach ($params as $key => $val) {
             $stmt->bindValue($key, $val);
         }
-        $stmt->bindValue(':start', $start, PDO::PARAM_INT);
-        $stmt->bindValue(':length', $length, PDO::PARAM_INT);
+        
+        // Forzar explícitamente enteros para evitar fallos de sintaxis SQL en LIMIT
+        $stmt->bindValue(':start', (int)$start, PDO::PARAM_INT);
+        $stmt->bindValue(':length', (int)$length, PDO::PARAM_INT);
         $stmt->execute();
         
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!$data) {
+            $data = []; // Retornar un contenedor vacío limpio si no hay filas
+        }
 
         echo json_encode([
-            "draw" => $draw,
-            "recordsTotal" => intval($totalRecords),
+            "draw" => intval($draw),
+            "recordsTotal" => $totalRecords,
             "recordsFiltered" => intval($totalRecordwithFilter),
             "data" => $data
         ]);
