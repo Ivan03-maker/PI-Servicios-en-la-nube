@@ -143,30 +143,28 @@ $(document).ready(function() {
                 "headers": { "Authorization": "Bearer " + authToken }
             },
             "columns": [
-            { 
-                "data": null,
-                "orderable": false,
-                "searchable": false,
-                "render": function (data, type, row, meta) {
-                    // Calcula el número consecutivo tomando en cuenta la paginación actual
-                    return meta.settings._iDisplayStart + meta.row + 1;
+                { 
+                    "data": null,
+                    "orderable": false,
+                    "searchable": false,
+                    "render": function (data, type, row, meta) {
+                        return meta.settings._iDisplayStart + meta.row + 1;
+                    }
+                },
+                { "data": "titulo" },
+                { "data": "director" },
+                { "data": "anio" },
+                { 
+                    "data": null,
+                    "orderable": false,
+                    "render": function (data, type, row) {
+                        return `
+                            <button class="ui-button ui-widget ui-corner-all btn-action btn-editar" data-id="${row.id}" data-titulo="${row.titulo}" data-director="${row.director}" data-anio="${row.anio}">Editar</button>
+                            <button class="ui-button ui-widget ui-corner-all btn-action btn-eliminar ui-state-error" data-id="${row.id}">Borrar</button>
+                        `;
+                    }
                 }
-            },
-            { "data": "titulo" },
-            { "data": "director" },
-            { "data": "anio" },
-            { 
-                "data": null,
-                "orderable": false,
-                "render": function (data, type, row) {
-                    // Nota que row.id se sigue manteniendo aquí para que el backend sepa exactamente qué borrar
-                    return `
-                        <button class="ui-button ui-widget ui-corner-all btn-action btn-editar" data-id="${row.id}" data-titulo="${row.titulo}" data-director="${row.director}" data-anio="${row.anio}">Editar</button>
-                        <button class="ui-button ui-widget ui-corner-all btn-action btn-eliminar ui-state-error" data-id="${row.id}">Borrar</button>
-                    `;
-                }
-            }
-],
+            ],
             "drawCallback": function(settings) {
                 $('#tablaPeliculas tbody tr').effect("highlight", {color: "#d0e5f5"}, 800);
             }
@@ -212,8 +210,13 @@ $(document).ready(function() {
                     contentType: 'application/json',
                     data: JSON.stringify(datos),
                     success: function(res) {
-                        $("#dialogoFormulario").dialog("close");
+                        // Primero disparamos la alerta de éxito en la pantalla
                         mostrarNotificacion(res.message, false);
+                        
+                        // Inmediatamente cerramos el formulario
+                        $("#dialogoFormulario").dialog("close");
+                        
+                        // Recargamos los registros asíncronamente de fondo
                         tabla.ajax.reload(null, false);
                     },
                     error: function(xhr) {
@@ -233,17 +236,28 @@ $(document).ready(function() {
         height: "auto",
         buttons: {
             "Eliminar Registro": function() {
-                $(this).dialog("close");
-                $(filaParaEliminar).hide("drop", { direction: "left" }, 600, function() {
-                    $.ajax({
-                        url: 'api.php?id=' + idParaEliminar,
-                        type: 'DELETE',
-                        headers: { "Authorization": "Bearer " + authToken },
-                        success: function(res) {
-                            mostrarNotificacion(res.message, false);
+                let self = this;
+                
+                $.ajax({
+                    url: 'api.php?id=' + idParaEliminar,
+                    type: 'DELETE',
+                    headers: { "Authorization": "Bearer " + authToken },
+                    success: function(res) {
+                        // Cerramos el cuadro de confirmación
+                        $(self).dialog("close");
+                        
+                        // Mostramos la notificación del sistema inmediatamente
+                        mostrarNotificacion(res.message, false);
+                        
+                        // Aplicamos el efecto de desaparición a la fila vieja de forma limpia
+                        $(filaParaEliminar).hide("drop", { direction: "left" }, 600, function() {
                             tabla.ajax.reload(null, false);
-                        }
-                    });
+                        });
+                    },
+                    error: function() {
+                        $(self).dialog("close");
+                        mostrarNotificacion("No se pudo eliminar el registro en la nube.", true);
+                    }
                 });
             },
             "Cancelar": function() { $(this).dialog("close"); }
