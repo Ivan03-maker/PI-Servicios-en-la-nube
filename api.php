@@ -36,10 +36,7 @@ $port = getenv('MYSQLPORT') ?: "3306";
 try {
     $pdo = new PDO("mysql:host=$host;port=$port;dbname=$db;charset=utf8", $user, $pass);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Desactivar emulación de prepares para que el LIMIT acepte enteros reales
     $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-    
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(["error" => "Error de conexión en Railway: " . $e->getMessage()]);
@@ -61,7 +58,6 @@ switch ($method) {
             $orderDir = isset($_GET['order'][0]['dir']) && $_GET['order'][0]['dir'] === 'desc' ? 'DESC' : 'ASC';
             $orderColumn = $columns[$orderColumnIndex];
 
-            // Asegurar que las consultas cuenten correctamente aun estando vacías
             $totalRecords = $pdo->query("SELECT COUNT(*) FROM peliculas")->fetchColumn();
             $totalRecords = $totalRecords ? intval($totalRecords) : 0;
 
@@ -80,12 +76,10 @@ switch ($method) {
             
             $stmt = $pdo->prepare($queryStr);
             
-            // 🌟 CORRECCIÓN CRUCIAL: Mapeamos los parámetros de búsqueda si existen
             foreach ($params as $key => $val) {
                 $stmt->bindValue($key, $val);
             }
             
-            // 🌟 VINCULACIÓN ASILADA: Forzamos la asignación de LIMIT sin importar el foreach previo
             $stmt->bindValue(':start', (int)$start, PDO::PARAM_INT);
             $stmt->bindValue(':length', (int)$length, PDO::PARAM_INT);
             $stmt->execute();
@@ -102,7 +96,6 @@ switch ($method) {
                 "data" => $data
             ]);
         } catch (Exception $e) {
-            // Si algo truena en el SQL, esto evitará la respuesta en blanco enviando el error en JSON estructurado
             echo json_encode([
                 "draw" => isset($_GET['draw']) ? intval($_GET['draw']) : 1,
                 "recordsTotal" => 0,
@@ -111,7 +104,7 @@ switch ($method) {
                 "error" => "Error interno en GET: " . $e->getMessage()
             ]);
         }
-        break;
+        exit; // Reemplazado break por exit
 
     case 'POST':
         $input = json_decode(file_get_contents('php://input'), true);
@@ -123,7 +116,7 @@ switch ($method) {
         $stmt = $pdo->prepare("INSERT INTO peliculas (titulo, director, anio) VALUES (?, ?, ?)");
         $stmt->execute([$input['titulo'], $input['director'], $input['anio']]);
         echo json_encode(["status" => "success", "message" => "Película agregada con éxito"]);
-        break;
+        exit; // Reemplazado break por exit
 
     case 'PUT':
         $input = json_decode(file_get_contents('php://input'), true);
@@ -135,7 +128,7 @@ switch ($method) {
         $stmt = $pdo->prepare("UPDATE peliculas SET titulo = ?, director = ?, anio = ? WHERE id = ?");
         $stmt->execute([$input['titulo'], $input['director'], $input['anio'], $input['id']]);
         echo json_encode(["status" => "success", "message" => "Película actualizada con éxito"]);
-        break;
+        exit; // Reemplazado break por exit
 
     case 'DELETE':
         if (isset($_GET['id'])) {
@@ -148,6 +141,6 @@ switch ($method) {
             
             echo json_encode(["status" => "success", "message" => "Película eliminada con éxito"]);
         }
-        break;
+        exit; // Reemplazado break por exit
 }
 ?>

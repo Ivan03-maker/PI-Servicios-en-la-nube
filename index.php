@@ -111,7 +111,7 @@
 <script>
 $(document).ready(function() {
     let authToken = "";
-    let tabla;
+    let tabla = null;
     let idParaEliminar = null;
     let filaParaEliminar = null;
 
@@ -210,14 +210,11 @@ $(document).ready(function() {
                     contentType: 'application/json',
                     data: JSON.stringify(datos),
                     success: function(res) {
-                        // Primero disparamos la alerta de éxito en la pantalla
-                        mostrarNotificacion(res.message, false);
-                        
-                        // Inmediatamente cerramos el formulario
                         $("#dialogoFormulario").dialog("close");
-                        
-                        // Recargamos los registros asíncronamente de fondo
-                        tabla.ajax.reload(null, false);
+                        mostrarNotificacion(res.message, false);
+                        if (tabla !== null) {
+                            tabla.ajax.reload(null, false);
+                        }
                     },
                     error: function(xhr) {
                         let errorMsg = xhr.responseJSON ? xhr.responseJSON.message : "Error operacional.";
@@ -237,21 +234,17 @@ $(document).ready(function() {
         buttons: {
             "Eliminar Registro": function() {
                 let self = this;
-                
                 $.ajax({
                     url: 'api.php?id=' + idParaEliminar,
                     type: 'DELETE',
                     headers: { "Authorization": "Bearer " + authToken },
                     success: function(res) {
-                        // Cerramos el cuadro de confirmación
                         $(self).dialog("close");
-                        
-                        // Mostramos la notificación del sistema inmediatamente
                         mostrarNotificacion(res.message, false);
-                        
-                        // Aplicamos el efecto de desaparición a la fila vieja de forma limpia
                         $(filaParaEliminar).hide("drop", { direction: "left" }, 600, function() {
-                            tabla.ajax.reload(null, false);
+                            if (tabla !== null) {
+                                tabla.ajax.reload(null, false);
+                            }
                         });
                     },
                     error: function() {
